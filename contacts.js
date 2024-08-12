@@ -1,10 +1,13 @@
 const express = require("express");
 const morgan = require("morgan");
 const { body, validationResult } = require("express-validator");
+const session = require("express-session");
+const store = require("connect-loki");
 
 const app = express();
+const LokiStore = store(session);
 
-let contactData = [
+const contactData = [
   {
     firstName: "Mike",
     lastName: "Jones",
@@ -43,6 +46,10 @@ const sortContacts = contacts => {
   });
 };
 
+const clone = object => {
+  return JSON.parse(JSON.stringify(object));
+};
+
 app.set("views", "./views");
 app.set("view engine", "pug");
 
@@ -50,13 +57,35 @@ app.use(express.static("public"));
 app.use(express.urlencoded({ extended: false }));
 app.use(morgan("common"));
 
+app.use(session({
+  cookie: {
+    httpOnly: true,
+    maxAge: 31 * 24 * 60 * 60 * 1000,
+    path: "/",
+    secure: false,
+  },
+  name: "launch-school-contacts-manager-session-id",
+  resave: false,
+  saveUninitialized: true,
+  secret: "this is not very secure",
+  store: new LokiStore({}),
+}))
+
+app.use((req, res, next) => {
+  if (!("contactData" in req.session)) {
+    req.session.contactData = clone(contactData);
+  }
+
+  next();
+});
+
 app.get("/", (req, res) => {
   res.redirect("/contacts");
 });
 
 app.get("/contacts", (req, res) => {
   res.render("contacts", {
-    contacts: sortContacts(contactData),
+    contacts: sortContacts(req.session.contactData),
   });
 });
 
@@ -65,7 +94,7 @@ app.get("/contacts/new", (req, res) => {
 });
 
 const validateName = (name, whichName) => {
-  return  body(name)
+  return body(name)
   .trim()
   .isLength({ min: 1})
   .withMessage(`${whichName} name is required.`)
@@ -94,19 +123,19 @@ app.post("/contacts/new",
     if(!errors.isEmpty()) {
       res.render("new-contact", {
         errorMessages: errors.array().map(error => error.msg),
-        firstName: res.locals.firstName,
-        lastName: res.locals.lastName,
-        phoneNumber: res.locals.phoneNumber
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        phoneNumber: req.body.phoneNumber
       });
     } else {
       next();
     }
   },
   (req, res) => {
-    contactData.push({
-      firstName: res.locals.firstName,
-      lastName: res.locals.lastName,
-      phoneNumber: res.locals.phoneNumber,
+    req.session.contactData.push({
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      phoneNumber: req.body.phoneNumber,
     });
     res.redirect("/contacts");
   }
