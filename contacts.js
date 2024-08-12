@@ -22,7 +22,7 @@ let contactData = [
     firstName: "Alicia",
     lastName: "Keys",
     phoneNumber: "515-489-4608",
-  },
+  }
 ];
 
 const sortContacts = contacts => {
@@ -62,28 +62,67 @@ app.get("/contacts/new", (req, res) => {
   res.render("new-contact");
 });
 
-app.post("/contacts/new", (req, res) => {
+const isAlphabetic = text => /^[a-z]+$/i.test(text);
+const isValidPhoneNumber = phoneNumber => /^\d{3}-\d{3}-\d{4}$/.test(phoneNumber);
+
+app.post("/contacts/new",
   (req, res, next) => {
     res.locals.errorMessages = [];
-    next()
+    next();
   },
   (req, res, next) => {
-    if(req.body.firstName.length === 0) {
-      errorMessages.push("First name is required.");
+    res.locals.firstName = req.body.firstName.trim(),
+    res.locals.lastName = req.body.lastName.trim(),
+    res.locals.phoneNumber = req.body.phoneNumber.trim()
+    
+    next();
+  },
+  (req, res, next) => {
+    let firstName = res.locals.firstName;
+    
+    if(firstName.length === 0) {
+      res.locals.errorMessages.push("First name is required.");
+    } else if(firstName.length > 25) {
+      res.locals.errorMessages.push("First name must be 25 characters or less.");
+    } else if(!isAlphabetic(firstName)) {
+      res.locals.errorMessages.push("First name must contain only alphabetic characters.");
     } 
 
     next();
   },
   (req, res, next) => {
-    if (req.body.lastName.length === 0) {
-      errorMessages.push("Last name is required.");
+    let lastName = res.locals.lastName;
+
+    if(lastName.length === 0) {
+      res.locals.errorMessages.push("Last name is required.");
+    } else if(lastName.length > 25) {
+      res.locals.errorMessages.push("Last name must be 25 characters or less.");
+    } else if(!isAlphabetic(lastName)) {
+      res.locals.errorMessages.push("Last name must contain only alphabetic characters.");
     } 
 
     next();
   },
   (req, res, next) => {
-    if (req.body.phoneNumber.length === 0) {
-      errorMessages.push("Phone number is required.");
+    let phoneNumber = res.locals.phoneNumber;
+
+    if (phoneNumber.length === 0) {
+      res.locals.errorMessages.push("Phone number is required.");
+    } else if (!isValidPhoneNumber(phoneNumber)) {
+      res.locals.errorMessages.push("Phone number must match ###-###-#### pattern.");
+    }
+
+    next();
+  },
+  (req, res, next) => { // check for duplicates
+    let fullName = `${res.locals.firstName} ${res.locals.lastName}`;
+
+    let foundContact = contactData.find(contact => {
+      return `${contact["firstName"]} ${contact["lastName"]}` === fullName;
+    });
+
+    if (foundContact) {
+      res.locals.errorMessages.push(`${fullName} is already on your contact list. Duplicates are not allowed.`);
     }
 
     next();
@@ -92,16 +131,23 @@ app.post("/contacts/new", (req, res) => {
     if (res.locals.errorMessages.length > 0) {
       res.render("new-contact", {
         errorMessages: res.locals.errorMessages,
+        firstName: res.locals.firstName,
+        lastName: res.locals.lastName,
+        phoneNumber: res.locals.phoneNumber
       });
+    } else {
+      next();
     }
-
-    next();
   },
   (req, res) => {
-    contactData.push({ ...req.body });
+    contactData.push({
+      firstName: res.locals.firstName,
+      lastName: res.locals.lastName,
+      phoneNumber: res.locals.phoneNumber,
+    });
     res.redirect("/contacts");
   }
-});
+);
 
 app.listen(3000, "localhost", () => {
   console.log("Listening to port 3000.");
